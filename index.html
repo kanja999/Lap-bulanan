@@ -475,6 +475,19 @@
     margin-right:4px;
   }
   .onhand-aksi{ white-space:nowrap; }
+  .up-toggle{
+    width:22px;
+    height:22px;
+    border-radius:50%;
+    border:2px solid rgba(255,255,255,.25);
+    cursor:pointer;
+    display:inline-block;
+    padding:0;
+    transition:background .15s;
+  }
+  .up-toggle.up-off{ background:#c0392b; }
+  .up-toggle.up-on{ background:#2ecc71; }
+  .up-toggle:hover{ opacity:.85; }
   .mini-lock-btn{
     background:none;
     border:1px solid var(--line);
@@ -784,7 +797,7 @@
       <table>
         <thead>
           <tr>
-            <th>No</th><th>Dist</th><th>Login</th><th>Program</th>
+            <th>No</th><th>Dist</th><th>UP</th><th>Login</th><th>Program</th>
             <th>Outlet</th><th>Produk</th><th>Qty</th><th>HNA</th><th>Total</th><th>Group</th><th>Divisi</th><th>Aksi</th>
           </tr>
         </thead>
@@ -1434,7 +1447,7 @@ function total(o){ return o.qty * o.hna; }
 function renderOnHand(){
   const tbody = document.getElementById("tbl-onhand");
   if(isLocked("onhand")){
-    tbody.innerHTML = lockScreenRowHtml("onhand", 12);
+    tbody.innerHTML = lockScreenRowHtml("onhand", 13);
     return;
   }
   tbody.innerHTML = "";
@@ -1451,7 +1464,7 @@ function renderOnHand(){
     if(idx === brightCount && brightCount>0 && dimCount>0){
       const divTr = document.createElement("tr");
       divTr.className = "divider";
-      divTr.innerHTML = `<td colspan="12">Sudah Login (${dimCount})</td>`;
+      divTr.innerHTML = `<td colspan="13">Sudah Login (${dimCount})</td>`;
       tbody.appendChild(divTr);
     }
     const dim = o.login ? "dimmed" : "";
@@ -1462,6 +1475,7 @@ function renderOnHand(){
     tr.innerHTML = `
       <td>${o.id}</td>
       <td class="chk"><select onchange="setDist(${o.id}, this.value)" ${lockAttr}>${distOpts}</select></td>
+      <td class="chk"><button class="up-toggle ${o.up?'up-on':'up-off'}" onclick="toggleUp(${o.id})" title="Klik untuk ganti penanda UP"></button></td>
       <td class="chk"><input type="checkbox" ${o.login?"checked":""} onchange="toggle(${o.id},'login',this.checked)" ${lockAttr}></td>
       <td class="chk"><input type="checkbox" ${o.program?"checked":""} onchange="toggle(${o.id},'program',this.checked)" ${lockAttr}></td>
       <td>${o.outlet}</td>
@@ -2066,12 +2080,27 @@ async function saveAllMappings(){
   btn.disabled = false;
   btn.textContent = "💾 Simpan Semua Perubahan";
   mpEditMode = false; // kunci lagi setelah tersimpan, supaya tidak kepencet tanpa sadar
+  applyEditModeUI();
   renderRekap();
   renderBoard();
 }
 
 function toggleEditMode(){
-  mpEditMode = !mpEditMode;
+  if(mpEditMode){
+    // Mematikan mode edit tidak butuh password, cuma menyalakan yang butuh.
+    mpEditMode = false;
+    applyEditModeUI();
+    renderMasterProduk();
+  } else {
+    requestEditAccess(()=>{
+      mpEditMode = true;
+      applyEditModeUI();
+      renderMasterProduk();
+    });
+  }
+}
+
+function applyEditModeUI(){
   const editBtn = document.getElementById("btnEditMapping");
   const saveBtn = document.getElementById("btnSaveAllMapping");
   const lockStatus = document.getElementById("lockStatus");
@@ -2084,7 +2113,6 @@ function toggleEditMode(){
     saveBtn.disabled = true;
     lockStatus.textContent = "🔒 Terkunci — klik Edit untuk mengubah";
   }
-  renderMasterProduk();
 }
 
 async function deleteMappingByIndex(idx){
@@ -2528,6 +2556,15 @@ function setDist(id, val){
   syncOrderToFirestore(o);
 }
 
+function toggleUp(id){
+  // Penanda pribadi (pengingat) — sengaja TIDAK ikut terkunci mode Edit,
+  // supaya bisa langsung diklik kapan saja tanpa perlu buka kunci dulu.
+  const o = orders.find(x=>x.id===id);
+  o.up = !o.up;
+  renderAll();
+  syncOrderToFirestore(o);
+}
+
 // ===== FORM TAMBAH/EDIT TRANSAKSI (Orderan on Hand) =====
 let editingOrderId = null; // null = mode tambah baru, selain itu = mode edit order dgn id ini
 
@@ -2675,6 +2712,7 @@ function saveOrderForm(){
       dist: DIST_OPTIONS[0],
       login: false,
       program: false,
+      up: false,
       outlet, produk: entry.produk, qty, hna,
       group: entry.group, divisi: entry.divisi
     };
